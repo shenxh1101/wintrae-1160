@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: "Space Grotesk", sans-serif;
+    line-height: 1.6;
+    font-weight: 400;
+    color: #2d2d2d;
+    background-color: #fafaf8;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: "Cormorant Garamond", serif;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  ::selection {
+    background-color: #ff6b35;
+    color: white;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #f0f0ed;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #c4c4c0;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #a0a09c;
+  }
+}
+
+@layer components {
+  .noise-bg {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+
+  .btn {
+    @apply px-4 py-2 border border-brand-charcoal text-brand-charcoal text-sm font-medium transition-all duration-300 rounded-sm;
+  }
+
+  .btn:hover {
+    @apply bg-brand-charcoal text-white;
+  }
+
+  .btn-primary {
+    @apply bg-brand-orange text-white border-brand-orange;
+  }
+
+  .btn-primary:hover {
+    @apply bg-brand-charcoal border-brand-charcoal;
+  }
+
+  .card {
+    @apply bg-white shadow-card transition-all duration-300;
+  }
+
+  .card:hover {
+    @apply shadow-card-hover -translate-y-0.5;
+  }
+
+  .label-tag {
+    @apply px-2 py-1 text-xs font-mono uppercase tracking-wider;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .animate-stagger {
+    animation-delay: calc(var(--stagger, 0) * 100ms);
+  }
+}
