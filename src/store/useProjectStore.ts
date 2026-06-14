@@ -9,6 +9,8 @@ import type {
   Annotation,
   Comment,
   ChangeItem,
+  DeliveryRecord,
+  DownloadRecord,
 } from "../types";
 import {
   project as initialProject,
@@ -25,6 +27,7 @@ interface PersistedState {
   versions: Version[];
   timelineEvents: TimelineEvent[];
   deliveryItems: DeliveryItem[];
+  deliveryRecord: DeliveryRecord | null;
 }
 
 interface ProjectState extends PersistedState {
@@ -57,12 +60,14 @@ interface ProjectState extends PersistedState {
   toggleDeliveryCompleted: (deliveryId: string) => void;
   confirmAllDeliveries: (signature: string) => void;
   addTimelineEvent: (event: Omit<TimelineEvent, "id" | "date">) => void;
+  addDownloadRecord: (type: "single" | "package", itemIds: string[]) => void;
 
   getDesignById: (designId: string) => any;
   getVersionById: (versionId: string) => Version | undefined;
   getAnnotationById: (annotationId: string) => Annotation | undefined;
   getAllAnnotations: () => Annotation[];
   getOpenAnnotationsCount: () => number;
+  getDesignGroupByDesignId: (designId: string) => DesignGroup | undefined;
   resetStore: () => void;
 }
 
@@ -74,10 +79,29 @@ const getInitialState = (): PersistedState => {
     if (stored) {
       const parsed = JSON.parse(stored);
       if (parsed.state) {
-        const { project, designGroups, versions, timelineEvents, deliveryItems } =
-          parsed.state;
-        if (project && designGroups && versions && timelineEvents && deliveryItems) {
-          return { project, designGroups, versions, timelineEvents, deliveryItems };
+        const {
+          project,
+          designGroups,
+          versions,
+          timelineEvents,
+          deliveryItems,
+          deliveryRecord,
+        } = parsed.state;
+        if (
+          project &&
+          designGroups &&
+          versions &&
+          timelineEvents &&
+          deliveryItems
+        ) {
+          return {
+            project,
+            designGroups,
+            versions,
+            timelineEvents,
+            deliveryItems,
+            deliveryRecord: deliveryRecord || null,
+          };
         }
       }
     }
@@ -90,6 +114,7 @@ const getInitialState = (): PersistedState => {
     versions: initialVersions,
     timelineEvents: initialTimelineEvents,
     deliveryItems: initialDeliveryItems,
+    deliveryRecord: null,
   };
 };
 
@@ -99,8 +124,7 @@ export const useProjectStore = create<ProjectState>()(
   persist(
     (set, get) => ({
       ...initialPersistedState,
-      activeGroupId:
-        initialPersistedState.designGroups[0]?.id || null,
+      activeGroupId: initialPersistedState.designGroups[0]?.id || null,
       activeDesignId:
         initialPersistedState.designGroups[0]?.designs[0]?.id || null,
       selectedAnnotationId: null,
@@ -131,6 +155,27 @@ export const useProjectStore = create<ProjectState>()(
         }));
       },
 
+      addDownloadRecord: (type, itemIds) => {
+        const newRecord: DownloadRecord = {
+          id: `dr${Date.now()}`,
+          type,
+          itemIds,
+          downloadedAt: new Date().toISOString(),
+          downloadedBy: currentUser,
+        };
+        set((state) => {
+          if (!state.deliveryRecord) {
+            return state;
+          }
+          return {
+            deliveryRecord: {
+              ...state.deliveryRecord,
+              downloadRecords: [newRecord, ...state.deliveryRecord.downloadRecords],
+            },
+          };
+        });
+      },
+
       updateAnnotationStatus: (annotationId, status) => {
         const annotation = get().getAnnotationById(annotationId);
         if (annotation) {
@@ -141,7 +186,11 @@ export const useProjectStore = create<ProjectState>()(
             type: "annotation",
             title: "批注状态更新",
             description: `"${annotation.content.slice(0, 30)}..." 状态更新为"${
-              status === "open" ? "待处理" : status === "resolved" ? "已解决" : "已关闭"
+              status === "open"
+                ? "待处理"
+                : status === "resolved"
+                  ? "已解决"
+                  : "已关闭"
             }"`,
             user: currentUser,
           });
@@ -172,7 +221,7 @@ export const useProjectStore = create<ProjectState>()(
           get().addTimelineEvent({
             type: "annotation",
             title: "新增评论",
-            description: `在批注中添加了新评论`,
+            description: "在批注中添加了新评论",
             user: currentUser,
           });
         }
@@ -257,6 +306,19 @@ export const useProjectStore = create<ProjectState>()(
           description: `项目已由"${signature}"确认交付，所有文件已归档`,
           user: currentUser,
         });
+
+        const newDeliveryRecord: DeliveryRecord = {
+          id: `dvr${Date.now()}`,
+          confirmedBy: currentUser.name,
+          confirmedAt: now,
+          signature,
+          deliveryItems: [...get().deliveryItems].map((item) => ({
+            ...item,
+            completed: true,
+          })),
+          downloadRecords: [],
+        };
+
         set((state) => ({
           deliveryItems: state.deliveryItems.map((item) => ({
             ...item,
@@ -267,6 +329,7 @@ export const useProjectStore = create<ProjectState>()(
             status: "delivered" as const,
             endDate: now.split("T")[0],
           },
+          deliveryRecord: newDeliveryRecord,
         }));
       },
 
@@ -277,6 +340,15 @@ export const useProjectStore = create<ProjectState>()(
           if (design) return design;
         }
         return null;
+      },
+
+      getDesignGroupByDesignId: (designId) => {
+        const state = get();
+        for (const group of state.designGroups) {
+          const design = group.designs.find((d) => d.id === designId);
+          if (design) return group;
+        }
+        return undefined;
       },
 
       getVersionById: (versionId) => {
@@ -319,6 +391,7 @@ export const useProjectStore = create<ProjectState>()(
           versions: initialVersions,
           timelineEvents: initialTimelineEvents,
           deliveryItems: initialDeliveryItems,
+          deliveryRecord: null,
           activeGroupId: initialDesignGroups[0]?.id || null,
           activeDesignId:
             initialDesignGroups[0]?.designs[0]?.id || null,
@@ -334,6 +407,7 @@ export const useProjectStore = create<ProjectState>()(
         versions: state.versions,
         timelineEvents: state.timelineEvents,
         deliveryItems: state.deliveryItems,
+        deliveryRecord: state.deliveryRecord,
       }),
       onRehydrateStorage: () => (state) => {
         console.log("State rehydrated from localStorage");

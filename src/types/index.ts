@@ -90,7 +90,25 @@ export interface DeliveryItem {
   description: string;
   fileType: string;
   fileSize: string;
+  fileName: string;
   completed: boolean;
+}
+
+export interface DownloadRecord {
+  id: string;
+  type: "single" | "package";
+  itemIds: string[];
+  downloadedAt: string;
+  downloadedBy: User;
+}
+
+export interface DeliveryRecord {
+  id: string;
+  confirmedBy: string;
+  confirmedAt: string;
+  signature: string;
+  deliveryItems: DeliveryItem[];
+  downloadRecords: DownloadRecord[];
 }
 
 export type PageRoute = "/" | "/browse" | "/comments" | "/compare" | "/delivery";

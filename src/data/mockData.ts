@@ -425,6 +425,7 @@ export const deliveryItems: DeliveryItem[] = [
     description: "包含 AI、EPS、SVG、PNG 等格式，适配各种使用场景",
     fileType: "ZIP",
     fileSize: "24.5 MB",
+    fileName: "云端科技-Logo源文件包.zip",
     completed: true,
   },
   {
@@ -433,6 +434,7 @@ export const deliveryItems: DeliveryItem[] = [
     description: "PDF 文档，详细说明品牌色彩使用规范",
     fileType: "PDF",
     fileSize: "3.2 MB",
+    fileName: "云端科技-品牌色彩系统规范.pdf",
     completed: true,
   },
   {
@@ -441,6 +443,7 @@ export const deliveryItems: DeliveryItem[] = [
     description: "Figma 设计文件，包含所有页面和组件",
     fileType: "FIG",
     fileSize: "156 MB",
+    fileName: "云端科技-UI设计源文件.fig",
     completed: false,
   },
   {
@@ -449,6 +452,7 @@ export const deliveryItems: DeliveryItem[] = [
     description: "自定义图标集，SVG 格式，共 48 个图标",
     fileType: "ZIP",
     fileSize: "1.8 MB",
+    fileName: "云端科技-图标库.zip",
     completed: true,
   },
   {
@@ -457,6 +461,7 @@ export const deliveryItems: DeliveryItem[] = [
     description: "完整的品牌视觉使用指南 PDF",
     fileType: "PDF",
     fileSize: "12.4 MB",
+    fileName: "云端科技-品牌视觉手册.pdf",
     completed: false,
   },
   {
@@ -465,6 +470,7 @@ export const deliveryItems: DeliveryItem[] = [
     description: "所有页面的切图和标注文件",
     fileType: "ZIP",
     fileSize: "45.2 MB",
+    fileName: "云端科技-切图标注资源.zip",
     completed: false,
   },
 ];

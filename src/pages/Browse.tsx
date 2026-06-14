@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronDown,
@@ -9,6 +9,9 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
+  Send,
+  Clock,
+  User,
 } from "lucide-react";
 import { useProjectStore } from "../store/useProjectStore";
 import { StatusBadge } from "../components/ui/StatusBadge";
@@ -23,11 +26,17 @@ export function Browse() {
     designGroups,
     activeGroupId,
     activeDesignId,
+    selectedAnnotationId,
     setActiveGroup,
     setActiveDesign,
+    setSelectedAnnotation,
     openLightbox,
     addAnnotation,
+    addComment,
+    updateAnnotationStatus,
+    getDesignGroupByDesignId,
   } = useProjectStore();
+
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     new Set(designGroups.map((g) => g.id))
   );
@@ -41,6 +50,8 @@ export function Browse() {
   const [annotationPriority, setAnnotationPriority] = useState<
     Annotation["priority"]
   >("medium");
+  const [replyContent, setReplyContent] = useState("");
+  const commentInputRef = useRef<HTMLTextAreaElement>(null);
 
   const toggleGroup = (groupId: string) => {
     setExpandedGroups((prev) => {
@@ -56,15 +67,23 @@ export function Browse() {
 
   const activeGroup = designGroups.find((g) => g.id === activeGroupId);
   const activeDesign = activeGroup?.designs.find((d) => d.id === activeDesignId);
+  const selectedAnnotation = activeDesign?.annotations.find(
+    (a) => a.id === selectedAnnotationId
+  );
 
   const handleImageClick = (
     e: React.MouseEvent<HTMLDivElement>,
     designId: string
   ) => {
     if (!annotationMode) {
+      const group = getDesignGroupByDesignId(designId);
+      if (group) {
+        setActiveGroup(group.id);
+      }
+      setActiveDesign(designId);
+      setSelectedAnnotation(null);
       const design = activeGroup?.designs.find((d) => d.id === designId);
       if (design) {
-        setActiveDesign(designId);
         openLightbox(design.imageUrl, design.title);
       }
       return;
@@ -74,6 +93,10 @@ export function Browse() {
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
 
+    const group = getDesignGroupByDesignId(designId);
+    if (group) {
+      setActiveGroup(group.id);
+    }
     setActiveDesign(designId);
     setNewAnnotation({ designId, x, y });
     setAnnotationContent("");
@@ -82,10 +105,16 @@ export function Browse() {
 
   const handleAnnotationPointClick = (
     e: React.MouseEvent,
-    annotation: Annotation
+    annotation: Annotation,
+    designId: string
   ) => {
     e.stopPropagation();
-    navigate("/comments");
+    const group = getDesignGroupByDesignId(designId);
+    if (group) {
+      setActiveGroup(group.id);
+    }
+    setActiveDesign(designId);
+    setSelectedAnnotation(annotation.id);
   };
 
   const submitAnnotation = () => {
@@ -119,9 +148,27 @@ export function Browse() {
     }
   };
 
+  const submitReply = () => {
+    if (!selectedAnnotationId || !replyContent.trim()) return;
+    addComment(selectedAnnotationId, replyContent.trim());
+    setReplyContent("");
+  };
+
+  const handleReplyKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      submitReply();
+    }
+  };
+
+  useEffect(() => {
+    if (selectedAnnotationId && commentInputRef.current) {
+      commentInputRef.current.focus();
+    }
+  }, [selectedAnnotationId]);
+
   return (
     <div className="flex h-[calc(100vh-4rem)]">
-      <aside className="w-72 border-r border-paper-200 bg-white/50 overflow-y-auto">
+      <aside className="w-72 border-r border-paper-200 bg-white/50 overflow-y-auto flex-shrink-0">
         <div className="p-4 border-b border-paper-200">
           <h2 className="text-xs font-mono uppercase tracking-wider text-ink-50 mb-1">
             方案分组
@@ -172,6 +219,7 @@ export function Browse() {
                       onClick={() => {
                         setActiveGroup(group.id);
                         setActiveDesign(design.id);
+                        setSelectedAnnotation(null);
                       }}
                       className={cn(
                         "w-full text-left px-3 py-2 pr-4 text-sm transition-colors relative",
@@ -269,7 +317,10 @@ export function Browse() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05, duration: 0.4 }}
-                  className="card group overflow-hidden relative"
+                  className={cn(
+                    "card group overflow-hidden relative",
+                    activeDesignId === design.id && "ring-2 ring-brand-orange"
+                  )}
                 >
                   <div
                     className={cn(
@@ -303,11 +354,15 @@ export function Browse() {
                     {design.annotations.map((annotation) => (
                       <button
                         key={annotation.id}
-                        onClick={(e) => handleAnnotationPointClick(e, annotation)}
+                        onClick={(e) =>
+                          handleAnnotationPointClick(e, annotation, design.id)
+                        }
                         className={cn(
                           "absolute w-6 h-6 -ml-3 -mt-3 rounded-full border-2 border-white shadow-lg transform transition-all",
-                          "flex items-center justify-center text-white text-[10px] font-bold font-mono",
-                          "hover:scale-125 hover:z-20",
+                          "flex items-center justify-center text-white text-[10px] font-bold font-mono z-10",
+                          "hover:scale-125",
+                          selectedAnnotationId === annotation.id &&
+                            "ring-2 ring-white ring-offset-1 scale-110",
                           getPriorityColor(annotation.priority).bg
                         )}
                         style={{
@@ -328,7 +383,7 @@ export function Browse() {
                       <div
                         className={cn(
                           "absolute w-6 h-6 -ml-3 -mt-3 rounded-full border-2 border-white shadow-lg animate-pulse",
-                          "flex items-center justify-center",
+                          "flex items-center justify-center z-20",
                           getPriorityColor(annotationPriority).bg
                         )}
                         style={{
@@ -455,86 +510,244 @@ export function Browse() {
         )}
       </AnimatePresence>
 
-      {activeDesign && !newAnnotation && (
-        <aside className="w-80 border-l border-paper-200 bg-white/50 overflow-y-auto">
-          <div className="p-4 border-b border-paper-200">
-            <h2 className="text-xs font-mono uppercase tracking-wider text-ink-50 mb-1">
-              方案详情
-            </h2>
-            <p className="text-lg font-medium text-ink-300">
-              {activeDesign.title}
-            </p>
-          </div>
-          <div className="p-4 space-y-4">
-            <div>
-              <p className="text-xs text-ink-50 mb-1">状态</p>
-              <StatusBadge status={activeDesign.status} />
-            </div>
-            <div>
-              <p className="text-xs text-ink-50 mb-1">版本</p>
-              <p className="text-ink-300 font-mono">v{activeDesign.version}</p>
-            </div>
-            <div>
-              <p className="text-xs text-ink-50 mb-1">描述</p>
-              <p className="text-ink-300 text-sm">{activeDesign.description}</p>
-            </div>
-            <div>
-              <p className="text-xs text-ink-50 mb-2">批注列表</p>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {activeDesign.annotations.length === 0 ? (
-                  <p className="text-sm text-ink-50 text-center py-4">
-                    暂无批注
-                  </p>
-                ) : (
-                  activeDesign.annotations.map((annotation) => (
-                    <div
-                      key={annotation.id}
-                      className="p-3 bg-paper-50 rounded-sm border border-paper-100 cursor-pointer hover:bg-paper-100 transition-colors"
-                      onClick={() => navigate("/comments")}
+      <AnimatePresence>
+        {activeDesign && (
+          <motion.aside
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 380, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="border-l border-paper-200 bg-white/80 backdrop-blur-sm overflow-hidden flex-shrink-0"
+          >
+            <div className="w-[380px] h-full flex flex-col">
+              {selectedAnnotation ? (
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  <div className="p-4 border-b border-paper-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setSelectedAnnotation(null)}
+                        className="text-ink-50 hover:text-ink-300 transition-colors"
+                      >
+                        <ChevronRight size={14} className="rotate-180" />
+                      </button>
+                      <h2 className="text-xs font-mono uppercase tracking-wider text-ink-50">
+                        批注讨论
+                      </h2>
+                    </div>
+                    <button
+                      onClick={() => setSelectedAnnotation(null)}
+                      className="text-ink-50 hover:text-ink-300 transition-colors"
                     >
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <p className="text-sm text-ink-300 line-clamp-2">
-                          {annotation.content}
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  <div className="p-4 border-b border-paper-200">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <p className="text-ink-300 font-medium">
+                        {selectedAnnotation.content}
+                      </p>
+                      <PriorityBadge
+                        priority={selectedAnnotation.priority}
+                        size="sm"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-ink-50 mb-3">
+                      <img
+                        src={selectedAnnotation.author.avatar}
+                        alt={selectedAnnotation.author.name}
+                        className="w-5 h-5 rounded-full"
+                      />
+                      <span>{selectedAnnotation.author.name}</span>
+                      <span>·</span>
+                      <span className="font-mono">
+                        {formatDateTime(selectedAnnotation.createdAt)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={selectedAnnotation.status} size="sm" />
+                      {selectedAnnotation.status !== "resolved" && (
+                        <button
+                          onClick={() =>
+                            updateAnnotationStatus(
+                              selectedAnnotation.id,
+                              "resolved"
+                            )
+                          }
+                          className="text-xs text-brand-mint hover:underline flex items-center gap-1"
+                        >
+                          <CheckCircle2 size={10} />
+                          标记已解决
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    <div className="space-y-3">
+                      {selectedAnnotation.comments.length === 0 ? (
+                        <p className="text-sm text-ink-50 text-center py-6">
+                          暂无回复，添加第一条评论吧
                         </p>
-                        <PriorityBadge priority={annotation.priority} size="sm" />
+                      ) : (
+                        selectedAnnotation.comments.map((comment) => (
+                          <div
+                            key={comment.id}
+                            className="flex gap-3"
+                          >
+                            <img
+                              src={comment.author.avatar}
+                              alt={comment.author.name}
+                              className="w-8 h-8 rounded-full flex-shrink-0"
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-medium text-ink-300">
+                                  {comment.author.name}
+                                </span>
+                                <span className="text-xs text-ink-50 font-mono">
+                                  {formatDateTime(comment.createdAt)}
+                                </span>
+                              </div>
+                              <p className="text-sm text-ink-300 bg-paper-50 p-3 rounded-sm">
+                                {comment.content}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-4 border-t border-paper-200">
+                    <div className="flex gap-2">
+                      <textarea
+                        ref={commentInputRef}
+                        value={replyContent}
+                        onChange={(e) => setReplyContent(e.target.value)}
+                        onKeyDown={handleReplyKeyDown}
+                        placeholder="输入评论..."
+                        className="flex-1 h-20 px-3 py-2 border border-paper-200 rounded-sm text-sm text-ink-300 placeholder:text-ink-50 focus:outline-none focus:border-brand-orange resize-none"
+                      />
+                      <button
+                        onClick={submitReply}
+                        disabled={!replyContent.trim()}
+                        className="self-end w-10 h-10 rounded-sm bg-brand-orange text-white flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:bg-brand-orange/90 transition-colors"
+                      >
+                        <Send size={16} />
+                      </button>
+                    </div>
+                    <p className="text-xs text-ink-50 mt-2 font-mono">
+                      Cmd/Ctrl + Enter 发送
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 overflow-y-auto">
+                  <div className="p-4 border-b border-paper-200">
+                    <h2 className="text-xs font-mono uppercase tracking-wider text-ink-50 mb-1">
+                      方案详情
+                    </h2>
+                    <p className="text-lg font-medium text-ink-300">
+                      {activeDesign.title}
+                    </p>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    <div className="flex items-center gap-3">
+                      <StatusBadge status={activeDesign.status} />
+                      <span className="text-ink-50 font-mono text-xs">
+                        v{activeDesign.version}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-xs text-ink-50 mb-1">描述</p>
+                      <p className="text-ink-300 text-sm">
+                        {activeDesign.description}
+                      </p>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs text-ink-50">批注列表</p>
+                        <span className="text-xs font-mono text-ink-50">
+                          {activeDesign.annotations.length} 条
+                        </span>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-ink-50">
-                        <span>{annotation.author.name}</span>
-                        <span>·</span>
-                        <span>{formatDateTime(annotation.createdAt)}</span>
-                        <span>·</span>
-                        <StatusBadge status={annotation.status} size="sm" />
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {activeDesign.annotations.length === 0 ? (
+                          <p className="text-sm text-ink-50 text-center py-6">
+                            暂无批注
+                          </p>
+                        ) : (
+                          activeDesign.annotations.map((annotation) => (
+                            <div
+                              key={annotation.id}
+                              onClick={() =>
+                                setSelectedAnnotation(annotation.id)
+                              }
+                              className={cn(
+                                "p-3 rounded-sm border cursor-pointer transition-colors",
+                                selectedAnnotationId === annotation.id
+                                  ? "bg-brand-orange/5 border-brand-orange/30"
+                                  : "bg-paper-50 border-paper-100 hover:bg-paper-100"
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-2 mb-2">
+                                <p className="text-sm text-ink-300 line-clamp-2">
+                                  {annotation.content}
+                                </p>
+                                <PriorityBadge
+                                  priority={annotation.priority}
+                                  size="sm"
+                                />
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-ink-50">
+                                <img
+                                  src={annotation.author.avatar}
+                                  alt={annotation.author.name}
+                                  className="w-4 h-4 rounded-full"
+                                />
+                                <span>{annotation.author.name}</span>
+                                <span>·</span>
+                                <StatusBadge
+                                  status={annotation.status}
+                                  size="sm"
+                                />
+                                <span className="ml-auto flex items-center gap-1">
+                                  <MessageSquare size={10} />
+                                  {annotation.comments.length}
+                                </span>
+                              </div>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
-                  ))
-                )}
-              </div>
+                    <div className="pt-2 space-y-2">
+                      <button
+                        onClick={() =>
+                          openLightbox(
+                            activeDesign.imageUrl,
+                            activeDesign.title
+                          )
+                        }
+                        className="w-full btn flex items-center justify-center gap-2"
+                      >
+                        <ZoomIn size={14} /> 查看大图
+                      </button>
+                      <button
+                        onClick={() => setAnnotationMode(true)}
+                        className="w-full btn btn-primary flex items-center justify-center gap-2"
+                      >
+                        <Plus size={14} /> 添加批注
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div>
-              <p className="text-xs text-ink-50 mb-1">创建时间</p>
-              <p className="text-ink-300 font-mono text-sm">
-                {formatDateTime(activeDesign.createdAt)}
-              </p>
-            </div>
-            <div className="pt-4 space-y-2">
-              <button
-                onClick={() =>
-                  openLightbox(activeDesign.imageUrl, activeDesign.title)
-                }
-                className="w-full btn flex items-center justify-center gap-2"
-              >
-                <ZoomIn size={14} /> 查看大图
-              </button>
-              <button
-                onClick={() => setAnnotationMode(true)}
-                className="w-full btn btn-primary flex items-center justify-center gap-2"
-              >
-                <Plus size={14} /> 添加批注
-              </button>
-            </div>
-          </div>
-        </aside>
-      )}
+          </motion.aside>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
