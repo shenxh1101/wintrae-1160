@@ -25,6 +25,7 @@ export const project: Project = {
   id: "p1",
   title: "云端科技品牌视觉升级",
   client: "云端科技有限公司",
+  designer,
   description:
     "为云端科技进行全面的品牌视觉升级，包括 Logo 优化、品牌色彩系统、UI 组件库以及营销物料设计。目标是打造更现代、更专业的品牌形象，提升市场竞争力。",
   coverImage:

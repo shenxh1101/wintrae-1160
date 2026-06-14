@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Download,
   CheckCircle2,
@@ -12,12 +13,15 @@ import {
   User,
   CheckSquare,
   Clock,
+  Loader2,
+  ArrowLeft,
 } from "lucide-react";
 import { useProjectStore } from "../store/useProjectStore";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { cn, formatDate, formatDateTime } from "../utils/helpers";
 
 export function Delivery() {
+  const navigate = useNavigate();
   const {
     project,
     deliveryItems,
@@ -28,6 +32,8 @@ export function Delivery() {
   const [signature, setSignature] = useState("");
   const [isConfirming, setIsConfirming] = useState(false);
   const [delivered, setDelivered] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   const completedCount = deliveryItems.filter((i) => i.completed).length;
   const totalSize = deliveryItems.reduce((sum, item) => {
@@ -48,6 +54,91 @@ export function Delivery() {
     }
   };
 
+  const generateFileContent = (item: any): string => {
+    const content = `${project.title} - 交付文件
+================================
+文件名: ${item.name}
+描述: ${item.description}
+文件类型: ${item.fileType}
+文件大小: ${item.fileSize}
+项目: ${project.title}
+客户: ${project.client}
+设计师: ${project.designer.name}
+交付日期: ${new Date().toLocaleDateString("zh-CN")}
+
+文件内容预览:
+${"=".repeat(32)}
+这是一份示例交付文件内容。
+在实际应用中，这里会是真实的设计文件内容。
+
+文件校验: SHA256-${item.id}-${Date.now()}
+`;
+    return content;
+  };
+
+  const downloadFile = (item: any) => {
+    setDownloadingId(item.id);
+    setTimeout(() => {
+      try {
+        const content = generateFileContent(item);
+        const blob = new Blob([content], {
+          type: "text/plain;charset=utf-8",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${item.name}.${item.fileType.toLowerCase() === "pdf" ? "pdf" : item.fileType.toLowerCase() === "zip" ? "zip" : "txt"}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error("下载失败:", e);
+        alert("下载失败，请重试");
+      }
+      setDownloadingId(null);
+    }, 800);
+  };
+
+  const downloadAll = async () => {
+    setDownloadingAll(true);
+    try {
+      for (const item of deliveryItems) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        downloadFile(item);
+      }
+      setTimeout(() => {
+        const manifest = {
+          project: project.title,
+          client: project.client,
+          designer: project.designer.name,
+          downloadDate: new Date().toISOString(),
+          files: deliveryItems.map((item) => ({
+            name: item.name,
+            type: item.fileType,
+            size: item.fileSize,
+            description: item.description,
+          })),
+        };
+        const blob = new Blob([JSON.stringify(manifest, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${project.title}-交付清单.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 400);
+    } catch (e) {
+      console.error("批量下载失败:", e);
+      alert("批量下载失败，请重试");
+    }
+    setDownloadingAll(false);
+  };
+
   const handleConfirmDelivery = () => {
     if (completedCount < deliveryItems.length) {
       alert("请先确认所有交付项");
@@ -61,7 +152,7 @@ export function Delivery() {
       alert("请输入确认签名");
       return;
     }
-    confirmAllDeliveries();
+    confirmAllDeliveries(signature);
     setDelivered(true);
     setIsConfirming(false);
   };
@@ -103,12 +194,30 @@ export function Delivery() {
                 {formatDateTime(new Date().toISOString())}
               </span>
             </div>
-            <div className="pt-4 border-t border-paper-200">
+            <div className="pt-4 border-t border-paper-200 space-y-2">
               <button
-                onClick={() => window.location.reload()}
-                className="w-full btn"
+                onClick={() => navigate("/")}
+                className="w-full btn flex items-center justify-center gap-2"
               >
+                <ArrowLeft size={14} />
                 返回项目首页
+              </button>
+              <button
+                onClick={downloadAll}
+                disabled={downloadingAll}
+                className="w-full btn btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {downloadingAll ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    下载中...
+                  </>
+                ) : (
+                  <>
+                    <Download size={14} />
+                    下载交付包
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -212,9 +321,22 @@ export function Delivery() {
                 <h2 className="text-xl font-display text-ink-300">
                   交付内容清单
                 </h2>
-                <button className="btn btn-primary flex items-center gap-2">
-                  <Download size={14} />
-                  下载全部
+                <button
+                  onClick={downloadAll}
+                  disabled={downloadingAll}
+                  className="btn btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {downloadingAll ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      下载中...
+                    </>
+                  ) : (
+                    <>
+                      <Download size={14} />
+                      下载全部
+                    </>
+                  )}
                 </button>
               </div>
 
@@ -284,10 +406,21 @@ export function Delivery() {
                             {item.fileType} · {item.fileSize}
                           </p>
                           <button
-                            className="text-xs text-brand-orange hover:underline mt-1 flex items-center gap-1 ml-auto"
+                            onClick={() => downloadFile(item)}
+                            disabled={downloadingId === item.id}
+                            className="text-xs text-brand-orange hover:underline mt-1 flex items-center gap-1 ml-auto disabled:opacity-50"
                           >
-                            <Download size={10} />
-                            下载
+                            {downloadingId === item.id ? (
+                              <>
+                                <Loader2 size={10} className="animate-spin" />
+                                下载中
+                              </>
+                            ) : (
+                              <>
+                                <Download size={10} />
+                                下载
+                              </>
+                            )}
                           </button>
                         </div>
                       </div>

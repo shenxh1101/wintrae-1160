@@ -62,11 +62,11 @@ export function getStatusColor(status: string): string {
   return colors[status] || "bg-ink-50 text-ink-300";
 }
 
-export function getPriorityColor(priority: string): string {
-  const colors: Record<string, string> = {
-    high: "bg-brand-coral text-white",
-    medium: "bg-brand-yellow text-ink-300",
-    low: "bg-ink-50 text-ink-300",
+export function getPriorityColor(priority: string): { bg: string; text: string; full: string } {
+  const colors: Record<string, { bg: string; text: string; full: string }> = {
+    high: { bg: "bg-brand-coral", text: "text-white", full: "bg-brand-coral text-white" },
+    medium: { bg: "bg-brand-yellow", text: "text-ink-300", full: "bg-brand-yellow text-ink-300" },
+    low: { bg: "bg-ink-50", text: "text-ink-300", full: "bg-ink-50 text-ink-300" },
   };
   return colors[priority] || colors.low;
 }

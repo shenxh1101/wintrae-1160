@@ -1,10 +1,21 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
-import { ChevronDown, ChevronRight, ZoomIn, MessageSquare } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ChevronDown,
+  ChevronRight,
+  ZoomIn,
+  MessageSquare,
+  Plus,
+  X,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 import { useProjectStore } from "../store/useProjectStore";
 import { StatusBadge } from "../components/ui/StatusBadge";
-import { cn, formatDateTime } from "../utils/helpers";
+import { PriorityBadge } from "../components/ui/PriorityBadge";
+import { cn, formatDateTime, getPriorityColor } from "../utils/helpers";
 import { useNavigate } from "react-router-dom";
+import type { Annotation } from "../types";
 
 export function Browse() {
   const navigate = useNavigate();
@@ -15,10 +26,21 @@ export function Browse() {
     setActiveGroup,
     setActiveDesign,
     openLightbox,
+    addAnnotation,
   } = useProjectStore();
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     new Set(designGroups.map((g) => g.id))
   );
+  const [annotationMode, setAnnotationMode] = useState(false);
+  const [newAnnotation, setNewAnnotation] = useState<{
+    designId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [annotationContent, setAnnotationContent] = useState("");
+  const [annotationPriority, setAnnotationPriority] = useState<
+    Annotation["priority"]
+  >("medium");
 
   const toggleGroup = (groupId: string) => {
     setExpandedGroups((prev) => {
@@ -34,6 +56,68 @@ export function Browse() {
 
   const activeGroup = designGroups.find((g) => g.id === activeGroupId);
   const activeDesign = activeGroup?.designs.find((d) => d.id === activeDesignId);
+
+  const handleImageClick = (
+    e: React.MouseEvent<HTMLDivElement>,
+    designId: string
+  ) => {
+    if (!annotationMode) {
+      const design = activeGroup?.designs.find((d) => d.id === designId);
+      if (design) {
+        setActiveDesign(designId);
+        openLightbox(design.imageUrl, design.title);
+      }
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+    setActiveDesign(designId);
+    setNewAnnotation({ designId, x, y });
+    setAnnotationContent("");
+    setAnnotationPriority("medium");
+  };
+
+  const handleAnnotationPointClick = (
+    e: React.MouseEvent,
+    annotation: Annotation
+  ) => {
+    e.stopPropagation();
+    navigate("/comments");
+  };
+
+  const submitAnnotation = () => {
+    if (!newAnnotation || !annotationContent.trim()) return;
+
+    addAnnotation(
+      newAnnotation.designId,
+      newAnnotation.x,
+      newAnnotation.y,
+      annotationContent.trim(),
+      annotationPriority
+    );
+
+    setNewAnnotation(null);
+    setAnnotationContent("");
+    setAnnotationPriority("medium");
+  };
+
+  const cancelAnnotation = () => {
+    setNewAnnotation(null);
+    setAnnotationContent("");
+    setAnnotationPriority("medium");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      cancelAnnotation();
+    }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      submitAnnotation();
+    }
+  };
 
   return (
     <div className="flex h-[calc(100vh-4rem)]">
@@ -139,13 +223,43 @@ export function Browse() {
                     {activeGroup.description}
                   </h1>
                 </div>
-                <button
-                  onClick={() => navigate("/comments")}
-                  className="btn btn-primary"
-                >
-                  添加批注
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setAnnotationMode(!annotationMode)}
+                    className={cn(
+                      "btn flex items-center gap-2 transition-all",
+                      annotationMode &&
+                        "bg-brand-orange text-white border-brand-orange hover:bg-brand-orange/90"
+                    )}
+                  >
+                    {annotationMode ? (
+                      <>
+                        <X size={14} /> 退出批注
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={14} /> 开启批注
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => navigate("/comments")}
+                    className="btn btn-primary flex items-center gap-2"
+                  >
+                    <MessageSquare size={14} /> 查看全部
+                  </button>
+                </div>
               </div>
+              {annotationMode && (
+                <motion.p
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-3 text-sm text-brand-orange flex items-center gap-2"
+                >
+                  <AlertCircle size={14} />
+                  批注模式已开启，点击设计图任意位置添加批注
+                </motion.p>
+              )}
             </motion.div>
 
             <div className="grid grid-cols-2 gap-6">
@@ -155,23 +269,77 @@ export function Browse() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05, duration: 0.4 }}
-                  className="card group cursor-pointer overflow-hidden"
-                  onClick={() => {
-                    setActiveDesign(design.id);
-                    openLightbox(design.imageUrl, design.title);
-                  }}
+                  className="card group overflow-hidden relative"
                 >
-                  <div className="relative aspect-[3/2] overflow-hidden">
+                  <div
+                    className={cn(
+                      "relative aspect-[3/2] overflow-hidden",
+                      annotationMode ? "cursor-crosshair" : "cursor-pointer"
+                    )}
+                    onClick={(e) => handleImageClick(e, design.id)}
+                  >
                     <img
                       src={design.imageUrl}
                       alt={design.title}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      className={cn(
+                        "w-full h-full object-cover transition-transform duration-500",
+                        !annotationMode && "group-hover:scale-105"
+                      )}
+                      draggable={false}
                     />
-                    <div className="absolute inset-0 bg-brand-charcoal/0 group-hover:bg-brand-charcoal/20 transition-colors flex items-center justify-center">
-                      <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <ZoomIn size={20} className="text-ink-300" />
+
+                    {!annotationMode && (
+                      <div className="absolute inset-0 bg-brand-charcoal/0 group-hover:bg-brand-charcoal/20 transition-colors flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <ZoomIn size={20} className="text-ink-300" />
+                        </div>
                       </div>
-                    </div>
+                    )}
+
+                    {annotationMode && (
+                      <div className="absolute inset-0 bg-brand-orange/5 border-2 border-brand-orange/40 transition-all" />
+                    )}
+
+                    {design.annotations.map((annotation) => (
+                      <button
+                        key={annotation.id}
+                        onClick={(e) => handleAnnotationPointClick(e, annotation)}
+                        className={cn(
+                          "absolute w-6 h-6 -ml-3 -mt-3 rounded-full border-2 border-white shadow-lg transform transition-all",
+                          "flex items-center justify-center text-white text-[10px] font-bold font-mono",
+                          "hover:scale-125 hover:z-20",
+                          getPriorityColor(annotation.priority).bg
+                        )}
+                        style={{
+                          left: `${annotation.x}%`,
+                          top: `${annotation.y}%`,
+                        }}
+                        title={annotation.content}
+                      >
+                        {annotation.status === "resolved" ? (
+                          <CheckCircle2 size={10} />
+                        ) : (
+                          <span>{annotation.comments.length + 1}</span>
+                        )}
+                      </button>
+                    ))}
+
+                    {newAnnotation?.designId === design.id && (
+                      <div
+                        className={cn(
+                          "absolute w-6 h-6 -ml-3 -mt-3 rounded-full border-2 border-white shadow-lg animate-pulse",
+                          "flex items-center justify-center",
+                          getPriorityColor(annotationPriority).bg
+                        )}
+                        style={{
+                          left: `${newAnnotation.x}%`,
+                          top: `${newAnnotation.y}%`,
+                        }}
+                      >
+                        <Plus size={12} className="text-white" />
+                      </div>
+                    )}
+
                     <div className="absolute top-3 right-3">
                       <StatusBadge status={design.status} />
                     </div>
@@ -182,6 +350,7 @@ export function Browse() {
                       </div>
                     )}
                   </div>
+
                   <div className="p-4">
                     <div className="flex items-start justify-between mb-1">
                       <h3 className="font-medium text-ink-300">{design.title}</h3>
@@ -207,7 +376,86 @@ export function Browse() {
         )}
       </main>
 
-      {activeDesign && (
+      <AnimatePresence>
+        {newAnnotation && (
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="fixed bottom-8 right-8 w-96 bg-white rounded-lg shadow-xl border border-paper-200 p-5 z-50"
+            onKeyDown={handleKeyDown}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium text-ink-300 flex items-center gap-2">
+                <Plus size={16} className="text-brand-orange" />
+                添加批注
+              </h3>
+              <button
+                onClick={cancelAnnotation}
+                className="text-ink-50 hover:text-ink-300 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs text-ink-50 mb-1">批注内容</p>
+                <textarea
+                  autoFocus
+                  value={annotationContent}
+                  onChange={(e) => setAnnotationContent(e.target.value)}
+                  placeholder="请输入你的意见或建议..."
+                  className="w-full h-24 px-3 py-2 border border-paper-200 rounded-sm text-sm text-ink-300 placeholder:text-ink-50 focus:outline-none focus:border-brand-orange resize-none"
+                />
+              </div>
+
+              <div>
+                <p className="text-xs text-ink-50 mb-2">优先级</p>
+                <div className="flex gap-2">
+                  {(["high", "medium", "low"] as const).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setAnnotationPriority(p)}
+                      className={cn(
+                        "flex-1 px-3 py-2 text-sm border rounded-sm transition-all",
+                        annotationPriority === p
+                          ? "border-transparent text-white"
+                          : "border-paper-200 text-ink-300 hover:border-paper-300",
+                        getPriorityColor(p).bg
+                      )}
+                    >
+                      {p === "high" ? "高" : p === "medium" ? "中" : "低"}优先级
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={cancelAnnotation}
+                  className="flex-1 btn text-sm"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={submitAnnotation}
+                  disabled={!annotationContent.trim()}
+                  className="flex-1 btn btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  提交批注
+                </button>
+              </div>
+            </div>
+
+            <p className="text-xs text-ink-50 mt-3 font-mono">
+              ESC 取消 · Cmd/Ctrl + Enter 提交
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {activeDesign && !newAnnotation && (
         <aside className="w-80 border-l border-paper-200 bg-white/50 overflow-y-auto">
           <div className="p-4 border-b border-paper-200">
             <h2 className="text-xs font-mono uppercase tracking-wider text-ink-50 mb-1">
@@ -231,8 +479,36 @@ export function Browse() {
               <p className="text-ink-300 text-sm">{activeDesign.description}</p>
             </div>
             <div>
-              <p className="text-xs text-ink-50 mb-1">批注数量</p>
-              <p className="text-ink-300">{activeDesign.annotations.length} 条</p>
+              <p className="text-xs text-ink-50 mb-2">批注列表</p>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {activeDesign.annotations.length === 0 ? (
+                  <p className="text-sm text-ink-50 text-center py-4">
+                    暂无批注
+                  </p>
+                ) : (
+                  activeDesign.annotations.map((annotation) => (
+                    <div
+                      key={annotation.id}
+                      className="p-3 bg-paper-50 rounded-sm border border-paper-100 cursor-pointer hover:bg-paper-100 transition-colors"
+                      onClick={() => navigate("/comments")}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <p className="text-sm text-ink-300 line-clamp-2">
+                          {annotation.content}
+                        </p>
+                        <PriorityBadge priority={annotation.priority} size="sm" />
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-ink-50">
+                        <span>{annotation.author.name}</span>
+                        <span>·</span>
+                        <span>{formatDateTime(annotation.createdAt)}</span>
+                        <span>·</span>
+                        <StatusBadge status={annotation.status} size="sm" />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
             <div>
               <p className="text-xs text-ink-50 mb-1">创建时间</p>
@@ -250,10 +526,10 @@ export function Browse() {
                 <ZoomIn size={14} /> 查看大图
               </button>
               <button
-                onClick={() => navigate("/comments")}
+                onClick={() => setAnnotationMode(true)}
                 className="w-full btn btn-primary flex items-center justify-center gap-2"
               >
-                <MessageSquare size={14} /> 添加批注
+                <Plus size={14} /> 添加批注
               </button>
             </div>
           </div>

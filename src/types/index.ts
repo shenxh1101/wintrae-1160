@@ -9,6 +9,7 @@ export interface Project {
   id: string;
   title: string;
   client: string;
+  designer: User;
   description: string;
   coverImage: string;
   startDate: string;
