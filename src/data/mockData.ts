@@ -475,5 +475,6 @@ export const deliveryItems: DeliveryItem[] = [
   },
 ];
 
+export { designer, client };
 export const currentUser = designer;
 export const currentClient = client;

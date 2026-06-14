@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send,
@@ -8,6 +9,7 @@ import {
   Filter,
   Search,
   ChevronDown,
+  ExternalLink,
 } from "lucide-react";
 import { useProjectStore } from "../store/useProjectStore";
 import { StatusBadge } from "../components/ui/StatusBadge";
@@ -21,6 +23,7 @@ import {
 import type { Annotation } from "../types";
 
 export function Comments() {
+  const navigate = useNavigate();
   const {
     designGroups,
     activeDesignId,
@@ -30,7 +33,15 @@ export function Comments() {
     addComment,
     addAnnotation,
     updateAnnotationStatus,
+    getDesignGroupByDesignId,
   } = useProjectStore();
+
+  const handleNavigateToBrowse = (designId: string, annotationId: string) => {
+    const params = new URLSearchParams();
+    params.set("designId", designId);
+    params.set("annotationId", annotationId);
+    navigate(`/browse?${params.toString()}`);
+  };
 
   const [newComment, setNewComment] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -371,7 +382,28 @@ export function Comments() {
                               <p className="text-sm text-ink-300 line-clamp-2">
                                 {annotation.content}
                               </p>
+                              <div className="flex items-center gap-1 mt-1 text-[10px] text-ink-50">
+                                <Clock size={10} />
+                                {formatRelativeTime(annotation.createdAt)}
+                                <span className="mx-1">·</span>
+                                <span className="text-brand-orange">
+                                  {activeDesign?.title}
+                                </span>
+                              </div>
                             </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleNavigateToBrowse(
+                                  activeDesignId!,
+                                  annotation.id
+                                );
+                              }}
+                              className="flex-shrink-0 p-1 text-ink-50 hover:text-brand-orange hover:bg-paper-100 rounded-sm transition-colors"
+                              title="定位到方案"
+                            >
+                              <ExternalLink size={12} />
+                            </button>
                           </div>
                           <div className="flex items-center gap-2 ml-7">
                             <PriorityBadge
@@ -382,9 +414,16 @@ export function Comments() {
                               status={annotation.status}
                               className="text-[10px]"
                             />
-                            <span className="text-[10px] text-ink-50 font-mono ml-auto">
-                              {formatRelativeTime(annotation.createdAt)}
-                            </span>
+                            <div className="flex items-center gap-1 ml-auto">
+                              <img
+                                src={annotation.author.avatar}
+                                alt={annotation.author.name}
+                                className="w-4 h-4 rounded-full"
+                              />
+                              <span className="text-[10px] text-ink-50">
+                                {annotation.author.name}
+                              </span>
+                            </div>
                           </div>
                         </motion.div>
                       ))

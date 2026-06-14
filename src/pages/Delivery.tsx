@@ -19,6 +19,11 @@ import {
   History,
   FileDown,
   Building,
+  FileCode,
+  File,
+  ChevronDown,
+  ChevronRight,
+  Receipt,
 } from "lucide-react";
 import { useProjectStore } from "../store/useProjectStore";
 import { StatusBadge } from "../components/ui/StatusBadge";
@@ -31,6 +36,7 @@ export function Delivery() {
     project,
     deliveryItems,
     deliveryRecord,
+    currentUser,
     toggleDeliveryCompleted,
     confirmAllDeliveries,
     addDownloadRecord,
@@ -40,8 +46,12 @@ export function Delivery() {
   const [isConfirming, setIsConfirming] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
+  const [expandedHistory, setExpandedHistory] = useState<Set<string>>(
+    new Set()
+  );
 
   const isDelivered = project.status === "delivered" && deliveryRecord;
 
@@ -62,6 +72,160 @@ export function Delivery() {
       default:
         return Package;
     }
+  };
+
+  const generateDirectoryListing = (): string => {
+    const lines: string[] = [];
+    lines.push(`${project.title} - 完整交付包`);
+    lines.push("=".repeat(60));
+    lines.push("");
+    lines.push("目录结构:");
+    lines.push("");
+    lines.push(`${project.title}-交付包/`);
+    lines.push("├── 设计文件/");
+    deliveryItems.forEach((item, index) => {
+      const prefix =
+        index === deliveryItems.length - 1 ? "│   └── " : "│   ├── ";
+      lines.push(`${prefix}${item.fileName} (${item.fileSize})`);
+    });
+    lines.push("├── 文档/");
+    lines.push("│   ├── 交付清单.json");
+    lines.push("│   ├── 验收单.txt");
+    lines.push("│   └── 目录清单.txt");
+    lines.push("└── 验收回执/");
+    lines.push("    └── 验收回执.pdf");
+    lines.push("");
+    lines.push("=".repeat(60));
+    lines.push("文件统计:");
+    lines.push(`  总文件数: ${deliveryItems.length + 4}`);
+    lines.push(`  交付文件: ${deliveryItems.length} 个`);
+    lines.push(`  文档文件: 4 个`);
+    lines.push(`  总大小: ${totalSize.toFixed(1)} MB`);
+    lines.push("");
+    lines.push(`生成时间: ${new Date().toLocaleString("zh-CN")}`);
+    return lines.join("\n");
+  };
+
+  const generateAcceptanceReceipt = (): string => {
+    const downloadSummary = deliveryRecord?.downloadRecords || [];
+    const downloadByUser = downloadSummary.reduce(
+      (acc, record) => {
+        const key = record.downloadedBy.name;
+        if (!acc[key]) {
+          acc[key] = { count: 0, files: 0, lastTime: "" };
+        }
+        acc[key].count += 1;
+        acc[key].files += record.itemIds.length;
+        acc[key].lastTime = record.downloadedAt;
+        return acc;
+      },
+      {} as Record<string, { count: number; files: number; lastTime: string }>
+    );
+
+    return `%PDF-1.4
+%âãÏÓ
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 2000 >>
+stream
+BT
+/F1 28 Tf
+72 750 Td
+(项目验收回执) Tj
+0 -30 Td
+/F2 12 Tf
+(Project Acceptance Receipt) Tj
+0 -50 Td
+/F1 14 Tf
+(项目信息) Tj
+0 -25 Td
+/F2 11 Tf
+(项目名称: ${project.title}) Tj
+0 -18 Td
+(客户: ${project.client}) Tj
+0 -18 Td
+(设计师: ${project.designer.name}) Tj
+0 -18 Td
+(项目周期: ${formatDate(project.startDate)} - ${formatDate(project.endDate)}) Tj
+0 -40 Td
+/F1 14 Tf
+(确认信息) Tj
+0 -25 Td
+/F2 11 Tf
+(确认人签名: ${deliveryRecord?.signature || "（待确认）"}) Tj
+0 -18 Td
+(确认身份: ${
+  deliveryRecord?.confirmedBy || currentUser.name
+} (${deliveryRecord ? "已确认" : "待确认"})) Tj
+0 -18 Td
+(确认时间: ${
+  deliveryRecord
+    ? formatDateTime(deliveryRecord.confirmedAt)
+    : "（待确认）"
+}) Tj
+0 -40 Td
+/F1 14 Tf
+(交付清单) Tj
+0 -25 Td
+/F2 11 Tf
+${deliveryItems
+  .map(
+    (item, i) =>
+      `(${i + 1}. ${item.name} - ${item.fileType} (${item.fileSize})) Tj\n0 -16 Td\n`
+  )
+  .join("")}
+0 -20 Td
+/F1 14 Tf
+(下载摘要) Tj
+0 -25 Td
+/F2 11 Tf
+${
+  Object.keys(downloadByUser).length === 0
+    ? "(暂无下载记录) Tj\n0 -18 Td\n"
+    : Object.entries(downloadByUser)
+        .map(
+          ([user, data]) =>
+            `(${user}: 下载 ${data.count} 次, 共 ${data.files} 个文件) Tj\n0 -18 Td\n(  最近: ${formatDateTime(data.lastTime)}) Tj\n0 -22 Td\n`
+        )
+        .join("")
+}
+0 -30 Td
+/F2 10 Tf
+(本回执由 DesignFlow 项目协作平台自动生成) Tj
+0 -14 Td
+(生成时间: ${new Date().toLocaleString("zh-CN")}) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000062 00000 n 
+0000000111 00000 n 
+0000000209 00000 n 
+0000002300 00000 n 
+0000002370 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+2450
+%%EOF
+`;
   };
 
   const generatePDFFileContent = (item: DeliveryItem): string => {
@@ -94,6 +258,8 @@ BT
 (文件类型: ${item.fileType}) Tj
 0 -20 Td
 (文件大小: ${item.fileSize}) Tj
+0 -20 Td
+(文件名: ${item.fileName}) Tj
 0 -40 Td
 /F1 16 Tf
 (文件描述:) Tj
@@ -139,14 +305,24 @@ ${item.description}
 客户: ${project.client}
 设计师: ${project.designer.name}
 打包时间: ${new Date().toLocaleString("zh-CN")}
+文件名: ${item.fileName}
 
 此 ZIP 包包含:
 - 设计源文件
 - 导出资源
 - 使用说明文档
 `);
-    zip.file("设计稿/设计图.png", Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==", "base64"));
-    zip.file("资源/素材.svg", `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="#FF6B35" width="100" height="100"/></svg>`);
+    zip.file(
+      "设计稿/设计图.png",
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
+        "base64"
+      )
+    );
+    zip.file(
+      "资源/素材.svg",
+      `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="#FF6B35" width="100" height="100"/></svg>`
+    );
     zip.file("使用说明.md", `# ${item.name}\n\n${item.description}\n`);
     return zip.generateAsync({ type: "blob" });
   };
@@ -173,6 +349,7 @@ ${item.description}
           client: project.client,
           designer: project.designer.name,
           description: item.description,
+          fileName: item.fileName,
           exportedAt: new Date().toISOString(),
         },
       },
@@ -191,12 +368,12 @@ ${item.description}
       return generateZIPFileContent(item);
     } else if (type === "FIG") {
       return new Blob([generateFIGFileContent(item)], {
-        type: "application/json",
+        type: "application/octet-stream",
       });
     }
     return new Blob(
       [
-        `${item.name}\n${"=".repeat(40)}\n${item.description}\n\n项目: ${project.title}\n客户: ${project.client}\n设计师: ${project.designer.name}`,
+        `${item.name}\n${"=".repeat(40)}\n${item.description}\n\n文件名: ${item.fileName}\n项目: ${project.title}\n客户: ${project.client}\n设计师: ${project.designer.name}`,
       ],
       { type: "text/plain;charset=utf-8" }
     );
@@ -223,7 +400,7 @@ ${item.description}
       triggerDownload(blob, item.fileName);
 
       if (deliveryRecord) {
-        addDownloadRecord("single", [item.id]);
+        addDownloadRecord("single", [item.id], [item.fileName]);
       }
     } catch (e) {
       console.error("下载失败:", e);
@@ -232,6 +409,23 @@ ${item.description}
 
     setDownloadingId(null);
     setDownloadProgress(0);
+  };
+
+  const downloadReceipt = async () => {
+    if (downloadingReceipt) return;
+    setDownloadingReceipt(true);
+
+    try {
+      const blob = new Blob([generateAcceptanceReceipt()], {
+        type: "application/pdf",
+      });
+      triggerDownload(blob, `${project.title}-验收回执.pdf`);
+    } catch (e) {
+      console.error("下载失败:", e);
+      alert("下载失败，请重试");
+    }
+
+    setDownloadingReceipt(false);
   };
 
   const downloadAll = async () => {
@@ -245,12 +439,18 @@ ${item.description}
 
       if (!folder) throw new Error("无法创建文件夹");
 
+      const designFolder = folder.folder("设计文件");
+      if (!designFolder) throw new Error("无法创建设计文件夹");
+
       for (let i = 0; i < deliveryItems.length; i++) {
         const item = deliveryItems[i];
         const blob = await generateFileBlob(item);
-        folder.file(item.fileName, blob);
-        setDownloadProgress(Math.round(((i + 1) / deliveryItems.length) * 80));
+        designFolder.file(item.fileName, blob);
+        setDownloadProgress(Math.round(((i + 1) / deliveryItems.length) * 70));
       }
+
+      const docsFolder = folder.folder("文档");
+      if (!docsFolder) throw new Error("无法创建文档文件夹");
 
       const manifestContent = {
         project: project.title,
@@ -260,6 +460,17 @@ ${item.description}
         generatedAt: new Date().toISOString(),
         totalFiles: deliveryItems.length,
         totalSize: `${totalSize.toFixed(1)} MB`,
+        directoryStructure: {
+          [`${project.title}-交付包`]: {
+            "设计文件": deliveryItems.map((i) => ({
+              name: i.fileName,
+              size: i.fileSize,
+              type: i.fileType,
+            })),
+            文档: ["交付清单.json", "验收单.txt", "目录清单.txt"],
+            "验收回执": ["验收回执.pdf"],
+          },
+        },
         files: deliveryItems.map((item) => ({
           name: item.name,
           fileName: item.fileName,
@@ -269,7 +480,7 @@ ${item.description}
           completed: item.completed,
         })),
       };
-      folder.file("交付清单.json", JSON.stringify(manifestContent, null, 2));
+      docsFolder.file("交付清单.json", JSON.stringify(manifestContent, null, 2));
 
       const acceptanceContent = `
 项目交付验收单
@@ -280,7 +491,9 @@ ${"=".repeat(50)}
 设计师: ${project.designer.name}
 
 交付内容:
-${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${item.fileSize})`).join("\n")}
+${deliveryItems
+  .map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${item.fileSize})`)
+  .join("\n")}
 
 验收说明:
   - 所有设计文件已按要求完成
@@ -289,11 +502,20 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
 
 确认信息:
   确认人签名: ${deliveryRecord?.signature || "（待确认）"}
-  确认时间: ${deliveryRecord ? formatDateTime(deliveryRecord.confirmedAt) : "（待确认）"}
+  确认时间: ${
+    deliveryRecord
+      ? formatDateTime(deliveryRecord.confirmedAt)
+      : "（待确认）"
+  }
 
 生成时间: ${new Date().toLocaleString("zh-CN")}
 `;
-      folder.file("验收单.txt", acceptanceContent);
+      docsFolder.file("验收单.txt", acceptanceContent);
+      docsFolder.file("目录清单.txt", generateDirectoryListing());
+
+      const receiptFolder = folder.folder("验收回执");
+      if (!receiptFolder) throw new Error("无法创建验收回执文件夹");
+      receiptFolder.file(`${project.title}-验收回执.pdf`, generateAcceptanceReceipt());
 
       setDownloadProgress(90);
 
@@ -310,7 +532,8 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
       if (deliveryRecord) {
         addDownloadRecord(
           "package",
-          deliveryItems.map((i) => i.id)
+          deliveryItems.map((i) => i.id),
+          deliveryItems.map((i) => i.fileName)
         );
       }
     } catch (e) {
@@ -341,6 +564,18 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
     setIsConfirming(false);
   };
 
+  const toggleHistoryItem = (id: string) => {
+    setExpandedHistory((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (deliveryRecord) {
       setSignature(deliveryRecord.signature);
@@ -366,16 +601,35 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
             </div>
             <div className="flex items-center gap-3">
               {isDelivered && (
-                <button
-                  onClick={() => setShowHistory(!showHistory)}
-                  className={cn(
-                    "btn flex items-center gap-2",
-                    showHistory && "bg-paper-100"
-                  )}
-                >
-                  <History size={14} />
-                  下载记录
-                </button>
+                <>
+                  <button
+                    onClick={downloadReceipt}
+                    disabled={downloadingReceipt}
+                    className="btn flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {downloadingReceipt ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        生成中...
+                      </>
+                    ) : (
+                      <>
+                        <Receipt size={14} />
+                        下载验收回执
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className={cn(
+                      "btn flex items-center gap-2",
+                      showHistory && "bg-paper-100"
+                    )}
+                  >
+                    <History size={14} />
+                    下载记录
+                  </button>
+                </>
               )}
               <StatusBadge status={project.status} />
             </div>
@@ -397,7 +651,7 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
                   <h3 className="text-lg font-medium text-ink-300 mb-2">
                     项目已交付完成
                   </h3>
-                  <div className="grid grid-cols-3 gap-6 text-sm">
+                  <div className="grid grid-cols-4 gap-6 text-sm">
                     <div>
                       <p className="text-ink-50 mb-1">确认人</p>
                       <p className="text-ink-300 font-mono">
@@ -405,9 +659,16 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
                       </p>
                     </div>
                     <div>
+                      <p className="text-ink-50 mb-1">确认身份</p>
+                      <p className="text-ink-300">
+                        {deliveryRecord?.confirmedBy}
+                      </p>
+                    </div>
+                    <div>
                       <p className="text-ink-50 mb-1">交付时间</p>
                       <p className="text-ink-300 font-mono">
-                        {deliveryRecord && formatDateTime(deliveryRecord.confirmedAt)}
+                        {deliveryRecord &&
+                          formatDateTime(deliveryRecord.confirmedAt)}
                       </p>
                     </div>
                     <div>
@@ -438,35 +699,92 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
                 暂无下载记录
               </p>
             ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="space-y-2 max-h-80 overflow-y-auto">
                 {deliveryRecord.downloadRecords.map((record) => (
                   <div
                     key={record.id}
-                    className="flex items-center justify-between p-3 bg-paper-50 rounded-sm"
+                    className="border border-paper-100 rounded-sm overflow-hidden"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-brand-orange/10 flex items-center justify-center">
-                        <FileDown size={14} className="text-brand-orange" />
+                    <button
+                      onClick={() => toggleHistoryItem(record.id)}
+                      className="w-full flex items-center justify-between p-3 bg-paper-50 hover:bg-paper-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        {expandedHistory.has(record.id) ? (
+                          <ChevronDown size={14} className="text-ink-50" />
+                        ) : (
+                          <ChevronRight size={14} className="text-ink-50" />
+                        )}
+                        <div className="w-8 h-8 rounded-full bg-brand-orange/10 flex items-center justify-center">
+                          {record.type === "package" ? (
+                            <Package size={14} className="text-brand-orange" />
+                          ) : (
+                            <File size={14} className="text-brand-orange" />
+                          )}
+                        </div>
+                        <div className="text-left">
+                          <p className="text-sm text-ink-300">
+                            {record.type === "package"
+                              ? "完整交付包"
+                              : "单个文件下载"}
+                          </p>
+                          <p className="text-xs text-ink-50 font-mono">
+                            {record.itemIds.length} 个文件 ·{" "}
+                            {formatDateTime(record.downloadedAt)}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm text-ink-300">
-                          {record.type === "package" ? "完整交付包" : "单个文件下载"}
-                        </p>
-                        <p className="text-xs text-ink-50 font-mono">
-                          {record.itemIds.length} 个文件 · {formatDateTime(record.downloadedAt)}
-                        </p>
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={record.downloadedBy.avatar}
+                          alt={record.downloadedBy.name}
+                          className="w-6 h-6 rounded-full"
+                        />
+                        <span className="text-xs text-ink-300">
+                          {record.downloadedBy.name}
+                          <span className="text-ink-50 ml-1">
+                            (
+                            {record.downloadedBy.role === "designer"
+                              ? "设计师"
+                              : "客户"}
+                            )
+                          </span>
+                        </span>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <img
-                        src={record.downloadedBy.avatar}
-                        alt={record.downloadedBy.name}
-                        className="w-6 h-6 rounded-full"
-                      />
-                      <span className="text-xs text-ink-300">
-                        {record.downloadedBy.name}
-                      </span>
-                    </div>
+                    </button>
+
+                    <AnimatePresence>
+                      {expandedHistory.has(record.id) && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="p-3 border-t border-paper-100 bg-white">
+                            <p className="text-xs text-ink-50 mb-2 font-mono">
+                              包含文件:
+                            </p>
+                            <div className="space-y-1">
+                              {record.itemNames.map((name, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center gap-2 px-2 py-1 text-sm"
+                                >
+                                  <FileCode
+                                    size={12}
+                                    className="text-ink-50 flex-shrink-0"
+                                  />
+                                  <span className="text-ink-300 truncate">
+                                    {name}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 ))}
               </div>
@@ -556,7 +874,9 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
                   {downloadingAll ? (
                     <>
                       <Loader2 size={14} className="animate-spin" />
-                      {downloadProgress > 0 ? `打包中 ${downloadProgress}%` : "下载中..."}
+                      {downloadProgress > 0
+                        ? `打包中 ${downloadProgress}%`
+                        : "下载中..."}
                     </>
                   ) : (
                     <>
@@ -576,6 +896,13 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
                       className="h-full bg-brand-orange rounded-full"
                     />
                   </div>
+                  <p className="text-xs text-ink-50 mt-2 font-mono">
+                    {downloadProgress < 70
+                      ? "正在打包设计文件..."
+                      : downloadProgress < 90
+                        ? "正在生成文档..."
+                        : "正在压缩交付包..."}
+                  </p>
                 </div>
               )}
 
@@ -602,7 +929,10 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
                             className="flex-shrink-0"
                           >
                             {item.completed ? (
-                              <CheckCircle2 size={20} className="text-brand-mint" />
+                              <CheckCircle2
+                                size={20}
+                                className="text-brand-mint"
+                              />
                             ) : (
                               <Circle
                                 size={20}
@@ -629,7 +959,9 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
                           <Icon
                             size={20}
                             className={
-                              item.completed ? "text-brand-mint" : "text-ink-300"
+                              item.completed
+                                ? "text-brand-mint"
+                                : "text-ink-300"
                             }
                           />
                         </div>
@@ -645,7 +977,9 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
                           >
                             {item.name}
                           </h4>
-                          <p className="text-sm text-ink-50">{item.description}</p>
+                          <p className="text-sm text-ink-50">
+                            {item.description}
+                          </p>
                           <p className="text-xs text-ink-50/70 font-mono mt-1">
                             {item.fileName}
                           </p>
@@ -662,7 +996,10 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
                           >
                             {downloadingId === item.id ? (
                               <>
-                                <Loader2 size={10} className="animate-spin" />
+                                <Loader2
+                                  size={10}
+                                  className="animate-spin"
+                                />
                                 生成中
                               </>
                             ) : (
@@ -723,6 +1060,18 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
                   <div>
                     <p className="text-xs text-ink-50">当前状态</p>
                     <StatusBadge status={project.status} />
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <User size={16} className="text-ink-50 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-ink-50">当前身份</p>
+                    <p className="text-sm text-ink-300">
+                      {currentUser.name}
+                      <span className="text-ink-50 text-xs ml-1">
+                        ({currentUser.role === "designer" ? "设计师" : "客户"})
+                      </span>
+                    </p>
                   </div>
                 </div>
               </div>
@@ -797,6 +1146,23 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
                     )}
                   </button>
                   <button
+                    onClick={downloadReceipt}
+                    disabled={downloadingReceipt}
+                    className="w-full btn flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {downloadingReceipt ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        生成中...
+                      </>
+                    ) : (
+                      <>
+                        <Receipt size={14} />
+                        下载验收回执
+                      </>
+                    )}
+                  </button>
+                  <button
                     onClick={() => navigate("/")}
                     className="w-full btn flex items-center justify-center gap-2"
                   >
@@ -837,7 +1203,12 @@ ${deliveryItems.map((item, i) => `  ${i + 1}. ${item.name} (${item.fileType}, ${
               确认交付？
             </h2>
             <p className="text-ink-50 text-center mb-6">
-              确认人：<span className="font-mono">{signature}</span>
+              确认人：
+              <span className="font-mono">{signature}</span>
+              <span className="text-ink-50 text-xs block mt-1">
+                身份：{currentUser.name} (
+                {currentUser.role === "designer" ? "设计师" : "客户"})
+              </span>
             </p>
             <p className="text-sm text-ink-50 text-center mb-6">
               确认后，所有交付项将被标记为已完成，项目状态将变更为「已交付」。此操作不可撤销。

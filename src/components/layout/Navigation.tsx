@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   Home,
   Image,
@@ -7,6 +7,7 @@ import {
   Package,
 } from "lucide-react";
 import { useProjectStore } from "../../store/useProjectStore";
+import { UserSwitcher } from "../ui/UserSwitcher";
 import { cn } from "../../utils/helpers";
 
 const navItems = [
@@ -18,6 +19,7 @@ const navItems = [
 ];
 
 export function Navigation() {
+  const location = useLocation();
   const project = useProjectStore((state) => state.project);
   const openCount = useProjectStore((state) => state.getOpenAnnotationsCount());
 
@@ -80,13 +82,14 @@ export function Navigation() {
           <div className="flex items-center gap-2">
             <span
               className={cn(
-                "label-tag",
+                "inline-flex items-center gap-1 rounded-sm text-xs font-mono px-2 py-1",
                 project.status === "review" && "bg-brand-yellow/20 text-ink-300",
                 project.status === "approved" && "bg-brand-mint/20 text-brand-mint",
                 project.status === "delivered" && "bg-brand-mint/20 text-brand-mint",
                 project.status === "revision" && "bg-brand-coral/20 text-brand-coral"
               )}
             >
+              <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60" />
               {project.status === "draft" && "草稿"}
               {project.status === "review" && "审核中"}
               {project.status === "revision" && "修改中"}
@@ -94,13 +97,7 @@ export function Navigation() {
               {project.status === "delivered" && "已交付"}
             </span>
           </div>
-          <div className="w-8 h-8 rounded-full bg-paper-200 flex items-center justify-center">
-            <img
-              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face"
-              alt="用户头像"
-              className="w-6 h-6 rounded-full object-cover"
-            />
-          </div>
+          <UserSwitcher />
         </div>
       </div>
     </nav>

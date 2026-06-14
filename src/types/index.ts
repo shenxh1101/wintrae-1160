@@ -82,6 +82,10 @@ export interface TimelineEvent {
   description: string;
   date: string;
   user: User;
+  metadata?: {
+    designId?: string;
+    annotationId?: string;
+  };
 }
 
 export interface DeliveryItem {
@@ -98,6 +102,7 @@ export interface DownloadRecord {
   id: string;
   type: "single" | "package";
   itemIds: string[];
+  itemNames: string[];
   downloadedAt: string;
   downloadedBy: User;
 }

@@ -17,11 +17,12 @@ import { useProjectStore } from "../store/useProjectStore";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { PriorityBadge } from "../components/ui/PriorityBadge";
 import { cn, formatDateTime, getPriorityColor } from "../utils/helpers";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { Annotation } from "../types";
 
 export function Browse() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     designGroups,
     activeGroupId,
@@ -35,6 +36,7 @@ export function Browse() {
     addComment,
     updateAnnotationStatus,
     getDesignGroupByDesignId,
+    getAnnotationById,
   } = useProjectStore();
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
@@ -51,6 +53,12 @@ export function Browse() {
     Annotation["priority"]
   >("medium");
   const [replyContent, setReplyContent] = useState("");
+  const [highlightedAnnotationId, setHighlightedAnnotationId] = useState<
+    string | null
+  >(null);
+  const [highlightedDesignId, setHighlightedDesignId] = useState<string | null>(
+    null
+  );
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
 
   const toggleGroup = (groupId: string) => {
@@ -159,6 +167,45 @@ export function Browse() {
       submitReply();
     }
   };
+
+  useEffect(() => {
+    const designId = searchParams.get("designId");
+    const annotationId = searchParams.get("annotationId");
+
+    if (designId) {
+      const group = getDesignGroupByDesignId(designId);
+      if (group) {
+        setActiveGroup(group.id);
+        setExpandedGroups((prev) => new Set([...prev, group.id]));
+        setActiveDesign(designId);
+
+        setHighlightedDesignId(designId);
+        setTimeout(() => setHighlightedDesignId(null), 3000);
+
+        if (annotationId) {
+          const annotation = getAnnotationById(annotationId);
+          if (annotation) {
+            setSelectedAnnotation(annotationId);
+            setHighlightedAnnotationId(annotationId);
+            setTimeout(() => setHighlightedAnnotationId(null), 3000);
+          }
+        }
+      }
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (activeDesignId) {
+      params.set("designId", activeDesignId);
+    }
+    if (selectedAnnotationId) {
+      params.set("annotationId", selectedAnnotationId);
+    }
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [activeDesignId, selectedAnnotationId]);
 
   useEffect(() => {
     if (selectedAnnotationId && commentInputRef.current) {
@@ -311,15 +358,32 @@ export function Browse() {
             </motion.div>
 
             <div className="grid grid-cols-2 gap-6">
-              {activeGroup.designs.map((design, index) => (
+              {activeGroup.designs.map((design, index) => {
+                const isHighlighted = highlightedDesignId === design.id;
+                return (
                 <motion.div
                   key={design.id}
                   initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05, duration: 0.4 }}
+                  animate={{
+                    opacity: 1,
+                    y: 0,
+                    scale: isHighlighted ? [1, 1.02, 1] : 1,
+                    boxShadow: isHighlighted
+                      ? ["0 0 0 0 rgba(247,147,30,0.4)", "0 0 0 16px rgba(247,147,30,0)"]
+                      : undefined,
+                  }}
+                  transition={{
+                    delay: index * 0.05,
+                    duration: 0.4,
+                    ...(isHighlighted && {
+                      scale: { duration: 0.6, times: [0, 0.3, 0.6] },
+                      boxShadow: { duration: 1.5, repeat: 1 },
+                    }),
+                  }}
                   className={cn(
                     "card group overflow-hidden relative",
-                    activeDesignId === design.id && "ring-2 ring-brand-orange"
+                    activeDesignId === design.id && "ring-2 ring-brand-orange",
+                    isHighlighted && "ring-4 ring-brand-orange/60"
                   )}
                 >
                   <div
@@ -351,33 +415,49 @@ export function Browse() {
                       <div className="absolute inset-0 bg-brand-orange/5 border-2 border-brand-orange/40 transition-all" />
                     )}
 
-                    {design.annotations.map((annotation) => (
-                      <button
-                        key={annotation.id}
-                        onClick={(e) =>
-                          handleAnnotationPointClick(e, annotation, design.id)
-                        }
-                        className={cn(
-                          "absolute w-6 h-6 -ml-3 -mt-3 rounded-full border-2 border-white shadow-lg transform transition-all",
-                          "flex items-center justify-center text-white text-[10px] font-bold font-mono z-10",
-                          "hover:scale-125",
-                          selectedAnnotationId === annotation.id &&
-                            "ring-2 ring-white ring-offset-1 scale-110",
-                          getPriorityColor(annotation.priority).bg
-                        )}
-                        style={{
-                          left: `${annotation.x}%`,
-                          top: `${annotation.y}%`,
-                        }}
-                        title={annotation.content}
-                      >
-                        {annotation.status === "resolved" ? (
-                          <CheckCircle2 size={10} />
-                        ) : (
-                          <span>{annotation.comments.length + 1}</span>
-                        )}
-                      </button>
-                    ))}
+                    {design.annotations.map((annotation) => {
+                      const isHighlighted = highlightedAnnotationId === annotation.id;
+                      return (
+                        <div
+                          key={annotation.id}
+                          className="absolute"
+                          style={{
+                            left: `${annotation.x}%`,
+                            top: `${annotation.y}%`,
+                          }}
+                        >
+                          {isHighlighted && (
+                            <div
+                              className={cn(
+                                "absolute w-6 h-6 -ml-3 -mt-3 rounded-full animate-pulse-ring",
+                                getPriorityColor(annotation.priority).bg
+                              )}
+                            />
+                          )}
+                          <button
+                            onClick={(e) =>
+                              handleAnnotationPointClick(e, annotation, design.id)
+                            }
+                            className={cn(
+                              "absolute w-6 h-6 -ml-3 -mt-3 rounded-full border-2 border-white shadow-lg transform transition-all",
+                              "flex items-center justify-center text-white text-[10px] font-bold font-mono z-10",
+                              "hover:scale-125",
+                              selectedAnnotationId === annotation.id &&
+                                "ring-2 ring-white ring-offset-1 scale-110",
+                              isHighlighted && "animate-bounce-in scale-125 ring-4 ring-white ring-offset-2",
+                              getPriorityColor(annotation.priority).bg
+                            )}
+                            title={annotation.content}
+                          >
+                            {annotation.status === "resolved" ? (
+                              <CheckCircle2 size={10} />
+                            ) : (
+                              <span>{annotation.comments.length + 1}</span>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
 
                     {newAnnotation?.designId === design.id && (
                       <div
@@ -421,7 +501,7 @@ export function Browse() {
                     </p>
                   </div>
                 </motion.div>
-              ))}
+                )})}
             </div>
           </div>
         ) : (

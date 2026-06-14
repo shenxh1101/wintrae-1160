@@ -47,6 +47,8 @@ export default {
         "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         "fade-in-up": "fadeInUp 0.6s ease-out forwards",
         "slide-in-right": "slideInRight 0.4s ease-out forwards",
+        "pulse-ring": "pulseRing 1.5s ease-out infinite",
+        "bounce-in": "bounceIn 0.6s ease-out",
       },
       keyframes: {
         fadeInUp: {
@@ -56,6 +58,15 @@ export default {
         slideInRight: {
           "0%": { opacity: "0", transform: "translateX(100%)" },
           "100%": { opacity: "1", transform: "translateX(0)" },
+        },
+        pulseRing: {
+          "0%": { transform: "scale(0.8)", opacity: "1" },
+          "100%": { transform: "scale(3)", opacity: "0" },
+        },
+        bounceIn: {
+          "0%": { transform: "scale(0.3)", opacity: "0" },
+          "50%": { transform: "scale(1.2)", opacity: "1" },
+          "100%": { transform: "scale(1)", opacity: "1" },
         },
       },
     },

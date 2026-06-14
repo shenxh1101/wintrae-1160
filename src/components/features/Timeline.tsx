@@ -1,5 +1,6 @@
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Layers, MessageSquare, CircleDot, Package } from "lucide-react";
+import { Layers, MessageSquare, CircleDot, Package, ExternalLink } from "lucide-react";
 import type { TimelineEvent } from "../../types";
 import { formatRelativeTime } from "../../utils/helpers";
 import { cn } from "../../utils/helpers";
@@ -16,6 +17,19 @@ interface TimelineProps {
 }
 
 export function Timeline({ events }: TimelineProps) {
+  const navigate = useNavigate();
+
+  const handleEventClick = (event: TimelineEvent) => {
+    if (event.type === "annotation" && event.metadata?.designId) {
+      const params = new URLSearchParams();
+      params.set("designId", event.metadata.designId);
+      if (event.metadata.annotationId) {
+        params.set("annotationId", event.metadata.annotationId);
+      }
+      navigate(`/browse?${params.toString()}`);
+    }
+  };
+
   return (
     <div className="relative">
       <div className="absolute left-[19px] top-2 bottom-2 w-px bg-paper-300" />
@@ -23,13 +37,18 @@ export function Timeline({ events }: TimelineProps) {
       <div className="space-y-6">
         {events.map((event, index) => {
           const Icon = iconMap[event.type] || CircleDot;
+          const isClickable = event.type === "annotation" && event.metadata?.designId;
           return (
             <motion.div
               key={event.id}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.05, duration: 0.4 }}
-              className="relative flex gap-4"
+              className={cn(
+                "relative flex gap-4",
+                isClickable && "cursor-pointer hover:bg-paper-50 -mx-2 px-2 py-1 rounded-sm transition-colors"
+              )}
+              onClick={() => isClickable && handleEventClick(event)}
             >
               <div
                 className={cn(
@@ -46,8 +65,12 @@ export function Timeline({ events }: TimelineProps) {
               <div className="flex-1 pt-1">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h4 className="text-ink-300 font-medium text-sm">
+                    <h4 className={cn(
+                      "font-medium text-sm flex items-center gap-1.5",
+                      isClickable ? "text-brand-orange hover:text-brand-orange/80" : "text-ink-300"
+                    )}>
                       {event.title}
+                      {isClickable && <ExternalLink size={12} className="flex-shrink-0" />}
                     </h4>
                     <p className="text-ink-50 text-sm mt-1">{event.description}</p>
                   </div>

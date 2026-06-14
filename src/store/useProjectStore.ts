@@ -11,6 +11,7 @@ import type {
   ChangeItem,
   DeliveryRecord,
   DownloadRecord,
+  User,
 } from "../types";
 import {
   project as initialProject,
@@ -18,7 +19,8 @@ import {
   versions as initialVersions,
   timelineEvents as initialTimelineEvents,
   deliveryItems as initialDeliveryItems,
-  currentUser,
+  designer,
+  client,
 } from "../data/mockData";
 
 interface PersistedState {
@@ -28,6 +30,7 @@ interface PersistedState {
   timelineEvents: TimelineEvent[];
   deliveryItems: DeliveryItem[];
   deliveryRecord: DeliveryRecord | null;
+  currentUser: User;
 }
 
 interface ProjectState extends PersistedState {
@@ -36,7 +39,9 @@ interface ProjectState extends PersistedState {
   selectedAnnotationId: string | null;
   compareVersionIds: [string, string];
   lightboxImage: { url: string; title: string } | null;
+  availableUsers: User[];
 
+  setCurrentUser: (user: User) => void;
   setActiveGroup: (groupId: string | null) => void;
   setActiveDesign: (designId: string | null) => void;
   setSelectedAnnotation: (annotationId: string | null) => void;
@@ -59,8 +64,12 @@ interface ProjectState extends PersistedState {
   toggleChangeConfirmed: (changeId: string) => void;
   toggleDeliveryCompleted: (deliveryId: string) => void;
   confirmAllDeliveries: (signature: string) => void;
-  addTimelineEvent: (event: Omit<TimelineEvent, "id" | "date">) => void;
-  addDownloadRecord: (type: "single" | "package", itemIds: string[]) => void;
+  addTimelineEvent: (event: Omit<TimelineEvent, "id" | "date" | "user">) => void;
+  addDownloadRecord: (
+    type: "single" | "package",
+    itemIds: string[],
+    itemNames: string[]
+  ) => void;
 
   getDesignById: (designId: string) => any;
   getVersionById: (versionId: string) => Version | undefined;
@@ -72,6 +81,7 @@ interface ProjectState extends PersistedState {
 }
 
 const STORAGE_KEY = "designflow-project-state";
+const availableUsers: User[] = [designer, client];
 
 const getInitialState = (): PersistedState => {
   try {
@@ -86,6 +96,7 @@ const getInitialState = (): PersistedState => {
           timelineEvents,
           deliveryItems,
           deliveryRecord,
+          currentUser,
         } = parsed.state;
         if (
           project &&
@@ -94,6 +105,7 @@ const getInitialState = (): PersistedState => {
           timelineEvents &&
           deliveryItems
         ) {
+          const user = availableUsers.find((u) => u.id === currentUser?.id) || designer;
           return {
             project,
             designGroups,
@@ -101,6 +113,7 @@ const getInitialState = (): PersistedState => {
             timelineEvents,
             deliveryItems,
             deliveryRecord: deliveryRecord || null,
+            currentUser: user,
           };
         }
       }
@@ -115,6 +128,7 @@ const getInitialState = (): PersistedState => {
     timelineEvents: initialTimelineEvents,
     deliveryItems: initialDeliveryItems,
     deliveryRecord: null,
+    currentUser: designer,
   };
 };
 
@@ -124,6 +138,7 @@ export const useProjectStore = create<ProjectState>()(
   persist(
     (set, get) => ({
       ...initialPersistedState,
+      availableUsers,
       activeGroupId: initialPersistedState.designGroups[0]?.id || null,
       activeDesignId:
         initialPersistedState.designGroups[0]?.designs[0]?.id || null,
@@ -133,6 +148,8 @@ export const useProjectStore = create<ProjectState>()(
         initialPersistedState.versions[1]?.id,
       ],
       lightboxImage: null,
+
+      setCurrentUser: (user) => set({ currentUser: user }),
 
       setActiveGroup: (groupId) => set({ activeGroupId: groupId }),
       setActiveDesign: (designId) => set({ activeDesignId: designId }),
@@ -145,23 +162,27 @@ export const useProjectStore = create<ProjectState>()(
       closeLightbox: () => set({ lightboxImage: null }),
 
       addTimelineEvent: (event) => {
+        const user = get().currentUser;
         const newEvent: TimelineEvent = {
           ...event,
           id: `t${Date.now()}`,
           date: new Date().toISOString(),
+          user,
         };
         set((state) => ({
           timelineEvents: [newEvent, ...state.timelineEvents],
         }));
       },
 
-      addDownloadRecord: (type, itemIds) => {
+      addDownloadRecord: (type, itemIds, itemNames) => {
+        const user = get().currentUser;
         const newRecord: DownloadRecord = {
           id: `dr${Date.now()}`,
           type,
           itemIds,
+          itemNames,
           downloadedAt: new Date().toISOString(),
-          downloadedBy: currentUser,
+          downloadedBy: user,
         };
         set((state) => {
           if (!state.deliveryRecord) {
@@ -192,7 +213,10 @@ export const useProjectStore = create<ProjectState>()(
                   ? "已解决"
                   : "已关闭"
             }"`,
-            user: currentUser,
+            metadata: {
+              designId: design?.id,
+              annotationId,
+            },
           });
         }
         set((state) => ({
@@ -209,20 +233,27 @@ export const useProjectStore = create<ProjectState>()(
       },
 
       addComment: (annotationId, content) => {
+        const user = get().currentUser;
         const newComment: Comment = {
           id: `c${Date.now()}`,
           annotationId,
           content,
-          author: currentUser,
+          author: user,
           createdAt: new Date().toISOString(),
         };
         const annotation = get().getAnnotationById(annotationId);
         if (annotation) {
+          const design = get()
+            .designGroups.flatMap((g) => g.designs)
+            .find((d) => d.annotations.some((a) => a.id === annotationId));
           get().addTimelineEvent({
             type: "annotation",
             title: "新增评论",
             description: "在批注中添加了新评论",
-            user: currentUser,
+            metadata: {
+              designId: design?.id,
+              annotationId,
+            },
           });
         }
         set((state) => ({
@@ -241,6 +272,7 @@ export const useProjectStore = create<ProjectState>()(
       },
 
       addAnnotation: (designId, x, y, content, priority) => {
+        const user = get().currentUser;
         const newAnnotation: Annotation = {
           id: `a${Date.now()}`,
           designId,
@@ -249,7 +281,7 @@ export const useProjectStore = create<ProjectState>()(
           content,
           priority,
           status: "open",
-          author: currentUser,
+          author: user,
           comments: [],
           createdAt: new Date().toISOString(),
         };
@@ -260,7 +292,10 @@ export const useProjectStore = create<ProjectState>()(
           type: "annotation",
           title: "新增批注",
           description: `在"${design?.title || "设计方案"}"添加了新批注`,
-          user: currentUser,
+          metadata: {
+            designId,
+            annotationId: newAnnotation.id,
+          },
         });
         set((state) => ({
           designGroups: state.designGroups.map((group) => ({
@@ -299,17 +334,17 @@ export const useProjectStore = create<ProjectState>()(
         })),
 
       confirmAllDeliveries: (signature) => {
+        const user = get().currentUser;
         const now = new Date().toISOString();
         get().addTimelineEvent({
           type: "delivery",
           title: "项目交付确认",
-          description: `项目已由"${signature}"确认交付，所有文件已归档`,
-          user: currentUser,
+          description: `项目已由"${signature}"(${user.role === "designer" ? "设计师" : "客户"})确认交付，所有文件已归档`,
         });
 
         const newDeliveryRecord: DeliveryRecord = {
           id: `dvr${Date.now()}`,
-          confirmedBy: currentUser.name,
+          confirmedBy: user.name,
           confirmedAt: now,
           signature,
           deliveryItems: [...get().deliveryItems].map((item) => ({
@@ -392,6 +427,7 @@ export const useProjectStore = create<ProjectState>()(
           timelineEvents: initialTimelineEvents,
           deliveryItems: initialDeliveryItems,
           deliveryRecord: null,
+          currentUser: designer,
           activeGroupId: initialDesignGroups[0]?.id || null,
           activeDesignId:
             initialDesignGroups[0]?.designs[0]?.id || null,
@@ -408,6 +444,7 @@ export const useProjectStore = create<ProjectState>()(
         timelineEvents: state.timelineEvents,
         deliveryItems: state.deliveryItems,
         deliveryRecord: state.deliveryRecord,
+        currentUser: state.currentUser,
       }),
       onRehydrateStorage: () => (state) => {
         console.log("State rehydrated from localStorage");
